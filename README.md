@@ -3,6 +3,8 @@
 > A CLI + web tool that scrapes any public webpage and produces a **short, snarky markdown summary** powered by the OpenAI API — built to explore LLM-driven content pipelines.
 
 ---
+![Website Summarizer](docs/screenshot.png)
+---
 
 ## ✨ What it does
 
@@ -88,9 +90,6 @@ Open `.env` and paste your key:
 ```
 OPENAI_API_KEY=sk-...
 ```
-
-> **Never commit `.env`.** It is already listed in `.gitignore`.
-
 ---
 
 ## 💻 CLI usage
@@ -262,7 +261,3 @@ openai.chat.completions.create(model, messages, stream=True/False)
 - **Some sites block** automated requests regardless of the `User-Agent` header.
 
 ---
-
-## 📄 License
-
-MIT — see [LICENSE](LICENSE) or add one of your choice.
