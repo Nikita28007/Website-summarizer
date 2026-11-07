@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Website Summarizer</title>
+<!-- Markdown parser + sanitizer -->
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dompurify/dist/purify.min.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: #0f172a;
+    color: #e2e8f0;
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    padding: 3rem 1.5rem;
+  }
+  .card {
+    background: #1e293b;
+    border: 1px solid #334155;
+    border-radius: 1rem;
+    padding: 2.25rem;
+    width: 100%;
+    max-width: 860px;
+    box-shadow: 0 25px 50px -12px rgba(0,0,0,.5);
+  }
+  .header { margin-bottom: 1.75rem; }
+  h1 { font-size: 1.85rem; font-weight: 700; color: #f8fafc; letter-spacing: -0.02em; margin-bottom: .35rem; }
+  .sub { color: #94a3b8; font-size: .925rem; }
+  
+  label {
+    display: block;
+    font-size: .78rem;
+    font-weight: 600;
+    color: #94a3b8;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    margin-bottom: .45rem;
+  }
+  input[type=url], select {
+    width: 100%;
+    padding: .7rem .9rem;
+    background: #0f172a;
+    border: 1px solid #334155;
+    border-radius: .5rem;
+    color: #f1f5f9;
+    font-size: .95rem;
+    transition: border-color .15s, box-shadow .15s;
+  }
+  input[type=url]:focus, select:focus {
+    outline: none;
+    border-color: #6366f1;
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+  }
+  .fields {
+    display: grid;
+    grid-template-columns: 1fr 220px;
+    gap: 1rem;
+    margin-bottom: 1.25rem;
+  }
+  @media (max-width: 640px) {
+    .fields { grid-template-columns: 1fr; }
+  }
+  
+  button#btn {
+    width: 100%;
+    padding: .8rem 1rem;
+    background: #6366f1;
+    border: none;
+    border-radius: .5rem;
+    color: #fff;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background .15s, transform .05s;
+  }
+  button#btn:hover { background: #4f46e5; }
+  button#btn:active { transform: translateY(1px); }
+  button#btn:disabled { background: #334155; color: #64748b; cursor: not-allowed; }
+  
+  #status {
+    margin-top: 1.25rem;
+    font-size: .875rem;
+    color: #94a3b8;
+    min-height: 1.25rem;
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+  }
+
+  /* Result container & tabs */
+  .result-container {
+    margin-top: 1.5rem;
+    display: none;
+    border-top: 1px solid #334155;
+    padding-top: 1.5rem;
+  }
+  .result-container.visible { display: block; }
+
+  .result-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: .75rem;
+  }
+  .tabs {
+    display: flex;
+    gap: .5rem;
+    background: #0f172a;
+    padding: .25rem;
+    border-radius: .5rem;
+    border: 1px solid #334155;
+  }
+  .tab-btn {
+    background: transparent;
+    border: none;
+    color: #94a3b8;
+    font-size: .8rem;
+    font-weight: 600;
+    padding: .35rem .75rem;
+    border-radius: .35rem;
+    cursor: pointer;
+    transition: all .15s;
+  }
+  .tab-btn.active {
+    background: #1e293b;
+    color: #f8fafc;
+    box-shadow: 0 1px 3px rgba(0,0,0,.3);
+  }
+  .copy-btn {
+    background: #0f172a;
+    border: 1px solid #334155;
+    color: #94a3b8;
+    font-size: .8rem;
+    font-weight: 500;
+    padding: .35rem .75rem;
+    border-radius: .4rem;
+    cursor: pointer;
+    transition: all .15s;
+  }
+  .copy-btn:hover { color: #f1f5f9; border-color: #64748b; }
+
+  /* Markdown rendered preview styling */
+  .markdown-body {
+    background: #0f172a;
+    border: 1px solid #334155;
+    border-radius: .6rem;
+    padding: 1.75rem 2rem;
+    color: #cbd5e1;
+    font-size: .95rem;
+    line-height: 1.75;
+    overflow-x: auto;
+  }
+  .markdown-body h1,
+  .markdown-body h2,
+  .markdown-body h3,
+  .markdown-body h4 {
+    color: #f8fafc;
+    font-weight: 700;
+    margin-top: 1.5rem;
+    margin-bottom: .75rem;
+    line-height: 1.3;
+  }
+  .markdown-body h1 { font-size: 1.5rem; border-bottom: 1px solid #334155; padding-bottom: .4rem; }
+  .markdown-body h2 { font-size: 1.25rem; border-bottom: 1px solid rgba(51,65,85,0.6); padding-bottom: .3rem; }
+  .markdown-body h3 { font-size: 1.1rem; }
+  .markdown-body h4 { font-size: 1rem; }
+  .markdown-body p { margin-bottom: 1rem; }
+  .markdown-body strong { color: #f1f5f9; font-weight: 600; }
+  .markdown-body em { color: #e2e8f0; font-style: italic; }
+  .markdown-body a { color: #818cf8; text-decoration: none; border-bottom: 1px dashed rgba(129, 140, 248, 0.4); }
+  .markdown-body a:hover { color: #a5b4fc; border-bottom-style: solid; }
+  
+  .markdown-body ul, .markdown-body ol {
+    margin-top: .4rem;
+    margin-bottom: 1rem;
+    padding-left: 1.5rem;
+  }
+  .markdown-body li {
+    margin-bottom: .35rem;
+  }
+  .markdown-body li::marker { color: #6366f1; }
+  
+  .markdown-body blockquote {
+    margin: 1.25rem 0;
+    padding: .85rem 1.25rem;
+    background: rgba(30, 41, 59, 0.7);
+    border-left: 4px solid #6366f1;
+    border-radius: 0 .4rem .4rem 0;
+    color: #94a3b8;
+    font-style: italic;
+  }
+  .markdown-body blockquote p:last-child { margin-bottom: 0; }
+  
+  .markdown-body code {
+    font-family: "JetBrains Mono", Consolas, Monaco, monospace;
+    font-size: .85em;
+    background: #1e293b;
+    color: #a5b4fc;
+    padding: .2em .45em;
+    border-radius: .3em;
+    border: 1px solid rgba(51, 65, 85, 0.5);
+  }
+  .markdown-body pre {
+    background: #090d16;
+    border: 1px solid #334155;
+    border-radius: .5rem;
+    padding: 1rem 1.25rem;
+    overflow-x: auto;
+    margin: 1.2rem 0;
+  }
+  .markdown-body pre code {
+    background: transparent;
+    border: none;
+    padding: 0;
+    color: #e2e8f0;
+    font-size: .85rem;
+    line-height: 1.6;
+  }
+  .markdown-body hr {
+    border: 0;
+    height: 1px;
+    background: #334155;
+    margin: 1.75rem 0;
+  }
+  .markdown-body table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1.25rem 0;
+  }
+  .markdown-body th, .markdown-body td {
+    border: 1px solid #334155;
+    padding: .6rem .8rem;
+    text-align: left;
+  }
+  .markdown-body th {
+    background: #1e293b;
+    color: #f8fafc;
+    font-weight: 600;
+  }
+  .markdown-body tr:nth-child(even) { background: rgba(30, 41, 59, 0.4); }
+
+  /* Raw markdown tab view */
+  #raw-result {
+    display: none;
+    background: #090d16;
+    border: 1px solid #334155;
+    border-radius: .6rem;
+    padding: 1.25rem 1.5rem;
+    font-family: "JetBrains Mono", Consolas, Monaco, monospace;
+    font-size: .825rem;
+    line-height: 1.65;
+    color: #cbd5e1;
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 550px;
+    overflow-y: auto;
+  }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="header">
+    <h1>🌐 Website Summarizer</h1>
+    <p class="sub">Paste any webpage URL — get a concise, snarky summary streamed in live markdown.</p>
+  </div>
+
+  <form id="form">
+    <div class="fields">
+      <div>
+        <label for="url">Target URL</label>
+        <input type="url" id="url" name="url" placeholder="https://news.ycombinator.com" required autofocus>
+      </div>
+      <div>
+        <label for="model">Model</label>
+        <select id="model" name="model">
+          <option value="{{ default_model }}">{{ default_model }} (default)</option>
+          <option value="gpt-5.4-mini">gpt-5.4-mini</option>
+          <option value="gpt-4.5-preview">gpt-4.5-preview</option>
+          <option value="o4-mini">o4-mini</option>
+          <option value="gpt-4o">gpt-4o</option>
+        </select>
+      </div>
+    </div>
+    <button type="submit" id="btn">Generate Summary</button>
+  </form>
+
+  <p id="status"></p>
+
+  <div class="result-container" id="resultContainer">
+    <div class="result-toolbar">
+      <div class="tabs">
+        <button type="button" class="tab-btn active" id="tabPreview">✨ Preview</button>
+        <button type="button" class="tab-btn" id="tabRaw">📝 Raw Markdown</button>
+      </div>
+      <button type="button" class="copy-btn" id="copyBtn">📋 Copy</button>
+    </div>
+    <div id="preview-result" class="markdown-body"></div>
+    <pre id="raw-result"></pre>
+  </div>
+</div>
+
+<script>
+  const form            = document.getElementById('form');
+  const resultContainer = document.getElementById('resultContainer');
+  const previewResult   = document.getElementById('preview-result');
+  const rawResult       = document.getElementById('raw-result');
+  const status          = document.getElementById('status');
+  const btn             = document.getElementById('btn');
+  const tabPreview      = document.getElementById('tabPreview');
+  const tabRaw          = document.getElementById('tabRaw');
+  const copyBtn         = document.getElementById('copyBtn');
+
+  let rawMarkdown = '';
+  let activeTab = 'preview';
+
+  // Configure marked for clean markdown parsing
+  if (window.marked) {
+    marked.setOptions({
+      breaks: true,
+      gfm: true
+    });
+  }
+
+  // Tab switching
+  tabPreview.addEventListener('click', () => {
+    activeTab = 'preview';
+    tabPreview.classList.add('active');
+    tabRaw.classList.remove('active');
+    previewResult.style.display = 'block';
+    rawResult.style.display = 'none';
+  });
+
+  tabRaw.addEventListener('click', () => {
+    activeTab = 'raw';
+    tabRaw.classList.add('active');
+    tabPreview.classList.remove('active');
+    rawResult.style.display = 'block';
+    previewResult.style.display = 'none';
+  });
+
+  // Copy button
+  copyBtn.addEventListener('click', async () => {
+    if (!rawMarkdown) return;
+    try {
+      await navigator.clipboard.writeText(rawMarkdown);
+      const originalText = copyBtn.textContent;
+      copyBtn.textContent = '✓ Copied!';
+      setTimeout(() => { copyBtn.textContent = originalText; }, 2000);
+    } catch (e) {
+      console.error(e);
+    }
+  });
+
+  function renderOutput() {
+    rawResult.textContent = rawMarkdown;
+    if (window.marked && window.DOMPurify) {
+      previewResult.innerHTML = DOMPurify.sanitize(marked.parse(rawMarkdown));
+    } else {
+      previewResult.textContent = rawMarkdown;
+    }
+  }
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    rawMarkdown = '';
+    previewResult.innerHTML = '';
+    rawResult.textContent = '';
+    resultContainer.classList.remove('visible');
+
+    btn.disabled = true;
+    status.innerHTML = '⏳ <span>Fetching website & analyzing...</span>';
+
+    const body = new URLSearchParams({
+      url:   document.getElementById('url').value,
+      model: document.getElementById('model').value,
+    });
+
+    let response;
+    try {
+      response = await fetch('/summarize/stream', { method: 'POST', body });
+    } catch (err) {
+      status.innerHTML = '❌ <span style="color:#f87171">Network error: ' + err.message + '</span>';
+      btn.disabled = false;
+      return;
+    }
+
+    if (!response.ok) {
+      const text = await response.text();
+      status.innerHTML = `❌ <span style="color:#f87171">${response.status} — ${text}</span>`;
+      btn.disabled = false;
+      return;
+    }
+
+    status.innerHTML = '✍️ <span>Streaming summary...</span>';
+    resultContainer.classList.add('visible');
+
+    const reader  = response.body.getReader();
+    const decoder = new TextDecoder();
+    let renderScheduled = false;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      rawMarkdown += decoder.decode(value, { stream: true });
+
+      // Throttle render for smooth streaming performance
+      if (!renderScheduled) {
+        renderScheduled = true;
+        requestAnimationFrame(() => {
+          renderOutput();
+          renderScheduled = false;
+        });
+      }
+    }
+
+    renderOutput();
+    status.innerHTML = '✅ <span style="color:#4ade80">Completed</span>';
+    btn.disabled = false;
+  });
+</script>
+</body>
+</html>

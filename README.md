@@ -1,103 +1,268 @@
-# Website Summarizer
+# 🌐 Website Summarizer
 
-Command-line tool that fetches a web page, extracts its text, and asks an LLM to produce a short summary in markdown. The summary is written in a deliberately snarky tone, and navigation text is ignored.
+> A CLI + web tool that scrapes any public webpage and produces a **short, snarky markdown summary** powered by the OpenAI API — built to explore LLM-driven content pipelines.
 
-## Features
+---
 
-- Fetches a page with a browser-like `User-Agent` header.
-- Extracts the title and visible body text. Scripts, styles, images, and inputs are removed.
-- Truncates content to 2,000 characters to keep the prompt small.
-- Summarizes the page, including news and announcements if present.
-- Provides a helper that returns all links found on a page.
+## ✨ What it does
 
-## Project structure
+1. Sends a real browser `User-Agent` header to fetch the target page (or uses a headless Chromium via **Playwright** for JS-heavy sites).
+2. Parses the HTML with **BeautifulSoup**, strips all noise (`<script>`, `<style>`, `<img>`, `<input>`), and extracts clean visible text.
+3. Truncates content to keep API costs low (2 000 chars for `requests`, 5 000 for Playwright).
+4. Streams the response from **GPT-5.4-mini** (swappable via `--model` or `.env`) token-by-token.
+5. Optionally persists summaries to **SQLite** or a **Markdown file**.
+6. Ships a **FastAPI web UI** that streams the summary live in the browser.
+
+---
+
+## 🛠️ Tech stack
+
+| Layer | Technology |
+|---|---|
+| Language | Python 3.9+ |
+| HTTP client | `requests` / `playwright` (headless Chromium) |
+| HTML parsing | `BeautifulSoup4` |
+| LLM provider | OpenAI Chat Completions API (streaming) |
+| Persistence | SQLite (stdlib `sqlite3`) |
+| Web framework | FastAPI + Uvicorn |
+| Config | `python-dotenv` |
+
+---
+
+## 📁 Project structure
 
 ```
-.
-├── scraper.py     # page fetching and parsing (requests + BeautifulSoup)
-└── summarize.py   # prompt construction, LLM call, CLI entry point
+website-summarizer/
+├── scraper.py      # requests-based HTML fetcher (default, fast)
+├── scraper_pw.py   # Playwright-based fetcher (JS-rendered pages)
+├── summarize.py    # CLI — argparse, streaming, --model flag, export options
+├── db.py           # SQLite persistence layer (save / list / get summaries)
+├── exporter.py     # Markdown file export utility
+├── app.py          # FastAPI web UI with live streaming
+├── requirements.txt
+├── .env.example    # Environment variable template (safe to commit)
+├── .gitignore
+└── README.md
 ```
 
-## Requirements
+---
 
-- Python 3.9+
-- OpenAI API key
+## 🚀 Quick start
+
+### 1 — Clone
 
 ```bash
-pip install openai requests beautifulsoup4
+git clone https://github.com/<your-username>/website-summarizer.git
+cd website-summarizer
 ```
 
-## Configuration
-
-Set the API key as an environment variable:
+### 2 — Create a virtual environment
 
 ```bash
-export OPENAI_API_KEY=your_openai_key
+# macOS / Linux
+python -m venv .venv && source .venv/bin/activate
+
+# Windows (PowerShell)
+python -m venv .venv
+.venv\Scripts\Activate.ps1
 ```
 
-On Windows (PowerShell):
-
-```powershell
-$env:OPENAI_API_KEY="your_openai_key"
-```
-
-| Parameter | File | Purpose |
-|---|---|---|
-| `MODEL` | `summarize.py` | OpenAI model ID used for summarization |
-| `system_prompt` | `summarize.py` | Tone and output format of the summary |
-| `user_prompt_prefix` | `summarize.py` | Task instruction placed before the page text |
-| `headers` | `scraper.py` | HTTP headers sent with each request |
-| Truncation limit | `scraper.py` | `[:2_000]` in `fetch_website_contents` |
-
-## Usage
+### 3 — Install dependencies
 
 ```bash
-python summarize.py
+pip install -r requirements.txt
+```
+
+### 4 — Configure your API key
+
+```bash
+# macOS / Linux
+cp .env.example .env
+
+# Windows (PowerShell)
+Copy-Item .env.example .env
+```
+
+Open `.env` and paste your key:
+
+```
+OPENAI_API_KEY=sk-...
+```
+
+> **Never commit `.env`.** It is already listed in `.gitignore`.
+
+---
+
+## 💻 CLI usage
+
+### Basic
+
+```bash
+python summarize.py https://news.ycombinator.com
+```
+
+### Pass URL as argument (no prompt)
+
+```bash
+python summarize.py https://example.com
+```
+
+### Stream tokens as they arrive
+
+```bash
+python summarize.py https://example.com --stream
+```
+
+### Override the model at runtime
+
+```bash
+python summarize.py https://example.com --model gpt-4o
+```
+
+### Use Playwright for JS-heavy pages
+
+```bash
+# Install browser once
+playwright install chromium
+
+python summarize.py https://react.dev --playwright
+```
+
+### Save to SQLite database
+
+```bash
+python summarize.py https://example.com --save-db
+# → summaries.db is created automatically
+```
+
+### Append to a Markdown file
+
+```bash
+python summarize.py https://example.com --save-md summaries.md
+```
+
+### Combine flags
+
+```bash
+python summarize.py https://example.com \
+  --model gpt-4o \
+  --stream \
+  --playwright \
+  --save-db \
+  --save-md output.md
+```
+
+### Full help
+
+```bash
+python summarize.py --help
 ```
 
 ```
-Enter a URL to summarize: https://example.com
+usage: summarize [-h] [--model MODEL] [--stream] [--playwright]
+                 [--save-db] [--save-md FILE]
+                 [url]
 
-Fetching and summarizing...
+positional arguments:
+  url            URL to summarize. If omitted, you will be prompted.
 
-<markdown summary>
+options:
+  --model MODEL  OpenAI model ID (default: gpt-5.4-mini)
+  --stream       Stream tokens to stdout as they arrive
+  --playwright   Use headless Chromium for JS-rendered pages
+  --save-db      Persist the summary to summaries.db (SQLite)
+  --save-md FILE Append the summary to FILE as a Markdown section
 ```
 
-As a module:
+---
+
+## 🌍 Web UI
+
+```bash
+uvicorn app:app --reload
+```
+
+Open **http://localhost:8000** — paste a URL, pick a model, and watch the summary stream live.
+
+---
+
+## 🔌 Use as a module
 
 ```python
 from summarize import summarize
 
-print(summarize("https://example.com"))
+# Basic
+summary = summarize("https://openai.com")
+
+# With options
+summary = summarize(
+    "https://react.dev",
+    model="gpt-4o",
+    stream=True,
+    use_playwright=True,
+)
 ```
 
-## How it works
+```python
+from scraper import fetch_website_contents, fetch_website_links
+from scraper_pw import fetch_website_contents as fetch_pw   # JS pages
 
-### `scraper.py`
+from db import save_summary, list_summaries
+from exporter import append_to_markdown
+```
 
-| Function | Input | Output |
-|---|---|---|
-| `fetch_website_contents(url)` | URL | Title and body text, truncated to 2,000 characters |
-| `fetch_website_links(url)` | URL | List of `href` values of all `<a>` tags (raw, not normalized) |
+---
 
-`fetch_website_contents` removes `script`, `style`, `img`, and `input` elements from the body before extracting text. If the page has no `<title>`, the string `No title found` is used.
+## ⚙️ Configuration
 
-### `summarize.py`
+| Variable | Where | Default | Description |
+|---|---|---|---|
+| `OPENAI_API_KEY` | `.env` | — | **Required.** Your OpenAI secret key. |
+| `MODEL` | `.env` | `gpt-5.4-mini` | Default model (overridden by `--model` flag). |
+| `system_prompt` | `summarize.py` | snarky tone | LLM personality and output format. |
+| `user_prompt_prefix` | `summarize.py` | see file | Task instruction prepended to page text. |
+| Truncation limit | `scraper.py` | `2_000` chars | Raise to send more context. |
+| Truncation limit | `scraper_pw.py` | `5_000` chars | Playwright renders more content. |
 
-1. `fetch_website_contents` retrieves the cleaned page text.
-2. `messages_for` builds a system message (role and style) and a user message (task and page content).
-3. `summarize` sends the messages to the chat completions API and returns the response text.
-4. `main` reads a URL from stdin and prints the summary.
+---
 
-## Known limitations
+## 🗺️ Architecture
 
-- Only the first 2,000 characters are summarized. Long pages are summarized from their beginning only.
-- Pages rendered by JavaScript return little or no content, because `requests` does not execute scripts.
-- Requests have no timeout and no error handling. A failing or hanging site raises an exception or blocks.
-- HTTP status codes are not checked. Error pages (403, 404) are summarized as if they were content.
-- `fetch_website_links` returns raw `href` values, including relative paths and anchors. It parses the page a second time when used together with `fetch_website_contents`.
-- Some sites block automated requests regardless of the `User-Agent` header.
+```
+CLI / Web UI
+     │
+     ▼
+summarize(url, model, stream, use_playwright)
+     │
+     ├─── scraper.py          requests + BeautifulSoup  (default)
+     │    └─── scraper_pw.py  Playwright + BeautifulSoup (--playwright)
+     │
+     ▼
+messages_for(website_text)
+  ├─ system: snarky assistant prompt
+  └─ user:   task + page text
+     │
+     ▼
+openai.chat.completions.create(model, messages, stream=True/False)
+     │
+     ├──► stdout (CLI)
+     ├──► StreamingResponse (FastAPI)
+     ├──► db.save_summary()   → summaries.db
+     └──► exporter.append_to_markdown() → *.md
+```
 
-## License
+---
 
-Add a license of your choice.
+## ⚠️ Known limitations
+
+- **JavaScript-rendered pages** return little content with the default `requests` scraper — use `--playwright` for SPAs.
+- **Only the first 2 000–5 000 characters** are summarized; long pages are summarized from their top only.
+- **No timeout or retry logic** in `scraper.py` — a slow site will block indefinitely.
+- **HTTP errors are not checked** — a 403 or 404 page is summarized as-is.
+- **Some sites block** automated requests regardless of the `User-Agent` header.
+
+---
+
+## 📄 License
+
+MIT — see [LICENSE](LICENSE) or add one of your choice.
